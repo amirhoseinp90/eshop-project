@@ -13,6 +13,7 @@ from project.apps.users.api.v1.serializers import CreateUserSerializer
 
 
 CREATE_USER_URL = reverse('v1:create-user')
+CREATE_TOKEN_URL = reverse('v1:create-token')
 
 
 def create_user(username='testusername', email='test@example.com', password='test123', **params):
@@ -78,6 +79,66 @@ class PublicUserApiTests(TestCase):
             email=payload['email']).exists()
         self.assertFalse(is_user_exists)
 
+    def test_create_token_for_user_successful(self):
+        """Test generating token for valid credentials is successful."""
+        user_details = {
+            'username': 'testusername',
+            'email': 'test@example.com',
+            'password': 'testpass123'
+        }
+
+        create_user(**user_details)
+
+        payload = {
+            'email': user_details['email'],
+            'password': user_details['password']
+        }
+
+        res = self.client.post(CREATE_TOKEN_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('token', res.data)
+
+    def test_create_token_user_does_not_exists(self):
+        """Test an error returned if user does not exists."""
+        payload = {
+            'email': 'test@example.com',
+            'password': 'testpass123'
+        }
+
+        res = self.client.post(CREATE_TOKEN_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertNotIn('token', res.data)
+
+    def test_create_token_bad_credentials_error(self):
+        """Test returns error if credentials invalid."""
+        payload = {
+            'email': 'test@example.com',
+            'password': 'testpass123'
+        }
+        create_user(**payload)
+        payload['password'] = 'badpassword'
+
+        res = self.client.post(CREATE_TOKEN_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertNotIn('token', res.data)
+
+    def test_create_token_blank_password(self):
+        """Test posting a blank password returns an error."""
+        payload = {
+            'email': 'test@example.com',
+            'password': 'testpass123'
+        }
+        create_user(**payload)
+        payload.pop('password')
+
+        res = self.client.post(CREATE_TOKEN_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertNotIn('token', res.data)
+
 
 class PrivateUsersApiTests(TestCase):
     """Test authenticated API requests."""
@@ -92,3 +153,9 @@ class PrivateUsersApiTests(TestCase):
         res = self.client.post(CREATE_USER_URL)
 
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_authenticated_login_faild(self):
+        """Test authenticated requests to create token endpoints will be faild."""
+        res = self.client.post(CREATE_TOKEN_URL)
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
